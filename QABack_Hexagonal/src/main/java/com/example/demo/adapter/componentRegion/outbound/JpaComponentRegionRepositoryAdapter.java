@@ -9,6 +9,7 @@ import com.example.demo.domain.Region;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
+import java.util.Optional;
 
 @Component
 public class JpaComponentRegionRepositoryAdapter implements ComponentRegionRepositoryPort {
@@ -43,5 +44,11 @@ public class JpaComponentRegionRepositoryAdapter implements ComponentRegionRepos
                 .existsByIdRegionIdAndIdComponentId(regionId, componentId);
     }
 
+    @Override
+    public Optional<ComponentRegion> findById(Long regionId, Long componentId) {
+        return repository
+                .findByIdRegionIdAndIdComponentId(regionId, componentId)
+                .map(mapper::toDomain);
+    }
 
 }

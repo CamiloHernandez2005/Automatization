@@ -9,6 +9,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.List;
+import java.util.Optional;
 
 public interface ComponentRegionRepository
         extends JpaRepository<ComponentRegionEntity, ComponentRegionId> {
@@ -34,5 +35,7 @@ public interface ComponentRegionRepository
        WHERE cr.id.regionId = :regionId
        """)
     List<ComponentEntity> findComponentsByRegionId(@Param("regionId") Long regionId);
+
+    Optional<ComponentRegionEntity> findByIdRegionIdAndIdComponentId(Long regionId, Long componentId);
 
 }
