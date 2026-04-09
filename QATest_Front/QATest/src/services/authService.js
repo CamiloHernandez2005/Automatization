@@ -1,4 +1,5 @@
-import apiClient from "@/axios";
+import {apiClient} from "@/axios";
+
 
 export const login = (email, password) => {
   return apiClient.post("/api/auth/login", {
@@ -15,6 +16,8 @@ export const verifySession = () => {
 export const logout = () => {
   return apiClient.post("/api/auth/logout");
 };
+
+
 
 
 
