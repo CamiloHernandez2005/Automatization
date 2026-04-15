@@ -15,9 +15,9 @@ import java.util.Arrays;
 @Slf4j
 public class PlaywrightUtils {
 
-    public static final Duration DEFAULT_TIMEOUT = Duration.ofSeconds(4);
-    public static final Duration SHORT_TIMEOUT = Duration.ofSeconds(2   );
-    public static final Duration LONG_TIMEOUT = Duration.ofSeconds(6);
+    public static final Duration DEFAULT_TIMEOUT = Duration.ofSeconds(5);
+    public static final Duration SHORT_TIMEOUT = Duration.ofSeconds(1);
+    public static final Duration LONG_TIMEOUT = Duration.ofSeconds(10);
 
     public String buildUrl(ComponentRegion region) {
         return String.format("http://%s:%s",
@@ -28,7 +28,8 @@ public class PlaywrightUtils {
     public Browser createBrowser(Playwright playwright) {
         return playwright.chromium().launch(new BrowserType.LaunchOptions()
                 .setHeadless(false)
-                .setArgs(Arrays.asList("--start-maximized")));
+                .setArgs(Arrays.asList("--start-maximized"))
+                .setTimeout(LONG_TIMEOUT.toMillis()));
     }
 
     public Browser.NewContextOptions configureContext() {
@@ -51,7 +52,7 @@ public class PlaywrightUtils {
         for (int attempt = 1; attempt <= maxAttempts; attempt++) {
             try {
                 page.locator(selector).fill(value);
-                log.debug("{} completado exitosamente", fieldName);
+                log.info("{} completado exitosamente", fieldName);
                 return;
             } catch (Exception e) {
                 if (attempt == maxAttempts) {
@@ -69,7 +70,7 @@ public class PlaywrightUtils {
             try {
                 page.locator(selector).click(new Locator.ClickOptions()
                         .setTimeout(SHORT_TIMEOUT.toMillis()));
-                log.debug("{} clickeado exitosamente", buttonName);
+                log.info("{} clickeado exitosamente", buttonName);
                 return;
             } catch (Exception e) {
                 if (attempt == maxAttempts) {
@@ -117,7 +118,7 @@ public class PlaywrightUtils {
                         .setTimeout(SHORT_TIMEOUT.toMillis()));
 
                 locator.fill(value);
-                log.debug("{} completado con selector: {}", fieldName, selector);
+                log.info("{} completado con selector: {}", fieldName, selector);
                 return;
             } catch (Exception e) {
                 // Continuar con siguiente selector
@@ -133,7 +134,7 @@ public class PlaywrightUtils {
                         .waitFor(new Locator.WaitForOptions()
                                 .setState(WaitForSelectorState.VISIBLE)
                                 .setTimeout(SHORT_TIMEOUT.toMillis()));
-                log.debug("{} encontrado con texto: {}", description, text);
+                log.info("{} encontrado con texto: {}", description, text);
                 return;
             } catch (Exception e) {
                 // Continuar con siguiente texto
@@ -142,39 +143,23 @@ public class PlaywrightUtils {
         throw new RuntimeException("No se encontró " + description);
     }
 
-    public boolean tryFillAmount(Page page, String[] selectors, String value, String fieldName) {
+    public boolean isElementVisible(Page page, String[] selectors) {
         for (String selector : selectors) {
             try {
                 Locator locator = page.locator(selector).first();
 
-                locator.waitFor(new Locator.WaitForOptions()
-                        .setState(WaitForSelectorState.VISIBLE)
-                        .setTimeout(SHORT_TIMEOUT.toMillis()));
-
-                if (!locator.isEnabled() || !locator.isEditable()) {
-                    continue;
+                if (locator.isVisible()) {
+                    log.info("Elemento encontrado y visible con selector: {}", selector);
+                    return true;
                 }
-
-                locator.scrollIntoViewIfNeeded();
-                locator.click(new Locator.ClickOptions().setForce(true));
-
-                locator.press("Control+A");
-                locator.press("Backspace");
-
-                locator.type(value, new Locator.TypeOptions().setDelay(50));
-
-                log.debug("{} completado con selector: {}", fieldName, selector);
-                return true;
-
             } catch (Exception e) {
-                // Intentar siguiente selector
+                // Continuar con siguiente selector
             }
         }
+        log.info("Ningún selector encontró un elemento visible");
         return false;
     }
-
-
-
+    
     public void waitBriefly() {
         try {
             Thread.sleep(1000);

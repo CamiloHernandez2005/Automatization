@@ -6,8 +6,8 @@ import java.util.Locale;
 @Getter
 public enum ProductFlowType {
 
-    TOP_UP("TOP UP", "RECARGA"),
-    WIRELESS("WIRELESS", "SERVICIO INALÁMBRICO"),
+    TOP_UP("RTR", "RECARGA"),
+    PIN("PINS", "PIN"),
     BILL_PAYMENT("BILL PAYMENT", "PAGO DE FACTURA"),
     CRYPTO("CRYPTO", "CRIPTOMONEDAS"),
     ACTIVATION("ACTIVATION", "ACTIVACIÓN"),
@@ -32,5 +32,12 @@ public enum ProductFlowType {
 
     public String getDisplayName() {
         return englishName;
+    }
+
+    public ProductFlowType getPurchaseFlow() {
+        return switch (this) {
+            case TOP_UP, PIN -> AIR_TIME;
+            default -> this;
+        };
     }
 }

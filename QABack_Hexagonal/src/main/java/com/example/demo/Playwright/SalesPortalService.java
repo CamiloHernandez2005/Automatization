@@ -33,7 +33,7 @@ public class SalesPortalService {
 
         String url = util.buildUrl(region);
 
-        log.debug("URL de destino: {}", url);
+        log.info("URL de destino: {}", url);
 
         try (Playwright playwright = Playwright.create()) {
             Browser browser = util.createBrowser(playwright);
@@ -46,10 +46,8 @@ public class SalesPortalService {
                 performLogin(page, url, request);
                 Thread.sleep(1000);
                 handleModalDialog(page);
-                Thread.sleep(2000);
-
+                Thread.sleep(1000);
                 enterClerkId(page, request.getClerkId());
-                confirmButton(page);
 
                 verifyLoginSuccess(page);
 
@@ -74,10 +72,9 @@ public class SalesPortalService {
 
 
     private void performLogin(Page page, String url, TestDTO request) {
-        log.debug("Realizando login en: {}", url);
+        log.info("Realizando login en: {}", url);
 
-        page.navigate(url, new Page.NavigateOptions()
-                .setWaitUntil(WaitUntilState.NETWORKIDLE));
+        page.navigate(url, new Page.NavigateOptions());
 
         util.fillFieldWithRetry(page, "input[name=\"userId\"]", request.getUsername(), "Usuario");
         util.fillFieldWithRetry(page, "input[name=\"password\"]", request.getPassword(), "Contraseña");
@@ -96,12 +93,12 @@ public class SalesPortalService {
 
             Locator closeButton = page.locator("button[aria-label=\"Close\"], button[aria-label=\"Cerrar\"]");
             closeButton.click(new Locator.ClickOptions()
-                    .setTimeout(util.DEFAULT_TIMEOUT.toMillis()));
+                    .setTimeout(util.SHORT_TIMEOUT.toMillis()));
 
 
-            log.debug("Diálogo modal cerrado exitosamente");
+            log.info("Diálogo modal cerrado exitosamente");
         } catch (Exception e) {
-            log.debug("No se encontró diálogo modal o ya estaba cerrado");
+            log.info("No se encontró diálogo modal o ya estaba cerrado");
         }
     }
 
@@ -113,8 +110,8 @@ public class SalesPortalService {
                 page.getByText(message, new Page.GetByTextOptions().setExact(false))
                         .waitFor(new Locator.WaitForOptions()
                                 .setState(WaitForSelectorState.VISIBLE)
-                                .setTimeout(util.DEFAULT_TIMEOUT.toMillis()));
-                log.debug("Login verificado con mensaje: {}", message);
+                                .setTimeout(util.SHORT_TIMEOUT.toMillis()));
+                log.info("Login verificado con mensaje: {}", message);
                 return;
             } catch (Exception e) {
                 // Continuar con el siguiente mensaje
@@ -124,63 +121,51 @@ public class SalesPortalService {
         throw new RuntimeException("No se pudo verificar el login exitoso");
     }
 
-    private String processTransaction(Page page, TestDTO request) {
-        searchProduct(page, request.getProductFlowType().getDisplayName());
+
+    private String processTransaction(Page page, TestDTO request) throws InterruptedException {
+
+        return switch (request.getProductFlowType()) {
+            case TOP_UP -> processTopUp(page, request);
+            case PIN -> processPin(page, request);
+            case BILL_PAYMENT -> processBillPayment(page, request);
+            case CRYPTO -> null;
+            case ACTIVATION -> null;
+            case PORT_IN -> null;
+            case TOOL -> null;
+            case AIR_TIME -> null;
+        };
+    }
+
+    private String processBaseFlow(Page page, TestDTO request) throws InterruptedException {
+
+        ProductFlowType flowType = request.getProductFlowType();
+        searchProduct(page, flowType.getPurchaseFlow().getDisplayName());
 
         selectCarrier(page, request.getCarrier());
-        selectCategory(page, request.getCategory());
+        selectCategory(page, flowType.getDisplayName());
         selectProduct(page, request.getProduct(), request.getAmount());
+        Thread.sleep(1000);
         confirmButton(page);
         if (request.isPhoneNumberEnabled()){
             enterPhoneNumber(page, request.getPhoneNumber());
             confirmButton(page);
         }
-        if (request.isClerkIdEnabled()){
-            enterClerkId(page, request.getClerkId());
-            confirmButton(page);
-        }
 
         return getTransactionReceipt(page);
     }
-//    private String processTransaction(Page page, TestDTO request) {
-//
-//        return switch (request.getProductFlowType()) {
-//            case TOPUP -> processTopUp(page, request);
-//            case PIN -> processPin(page, request);
-//            case BILL_PAYMENT -> processBillPayment(page, request);
-//        };
-//    }
 
-//    private String processBaseFlow(
-//            Page page,
-//            TestDTO request,
-//            boolean includePhone,
-//    ) {
-//
-//        searchProduct(page, String.valueOf(request.getProductFlowType()));
-//        selectCarrier(page, request.getCarrier());
-//        selectProduct(page, request.getProduct(), request.getAmount());
-//
-//        confirmButton(page);
-//
-//        if (includePhone) {
-//            enterPhoneNumber(page, request.getPhoneNumber());
-//            confirmButton(page);
-//        }
-//
-//        enterClerkId(page, request.getClerkId());
-//        confirmButton(page);
-//
-//
-//        return getTransactionReceipt(page);
-//    }
-
-//    private String processTopUp(Page page, TestDTO request) {
-//        return processBaseFlow(page, request, true, true);
-//    }
+    private String processTopUp(Page page, TestDTO request) throws InterruptedException {
+        return processBaseFlow(page, request);
+    }
+    private String processPin(Page page, TestDTO request) throws InterruptedException {
+        return processBaseFlow(page, request);
+    }
+    private String processBillPayment(Page page, TestDTO request) throws InterruptedException {
+        return processBaseFlow(page, request);
+    }
 
     private void searchProduct(Page page, String productType) {
-        log.debug("Buscando producto: {}", productType);
+        log.info("Buscando producto: {}", productType);
 
         String[] searchButtonSelectors = {
                 "button[aria-label=\"Open search\"]",
@@ -201,7 +186,13 @@ public class SalesPortalService {
 
         util.fillWithSelectorOptions(page, searchInputSelectors, productType, "Campo de búsqueda");
 
-        util.clickWithRetry(page, "button[tabindex=\"0\"], button[type=\"submit\"]", "Acción de búsqueda");
+        String[] searchFlowSelectors = {
+                "button:has-text(\"" + productType + "\")",
+                "text=" + productType
+        };
+
+        util.clickWithSelectorOptions(page, searchFlowSelectors, "Acción de búsqueda");
+
 
         page.waitForLoadState(LoadState.NETWORKIDLE);
 
@@ -209,7 +200,7 @@ public class SalesPortalService {
 
 
     private void selectCarrier(Page page, String carrier) {
-        log.debug("Seleccionando carrier: {}", carrier);
+        log.info("Seleccionando carrier: {}", carrier);
 
         util.waitForAnyText(page,
                 new String[]{"Selecciona el operador", "Select the carrier"},
@@ -218,7 +209,7 @@ public class SalesPortalService {
         clickCarrierOrProduct(page, carrier, "Carrier");
     }
     private void selectCategory(Page page, String category) {
-        log.debug("Seleccionando categoria: {}", category);
+        log.info("Seleccionando categoria: {}", category);
 
         util.waitForAnyText(page,
                 new String[]{"Seleccione la categoría del servicio que prefieras.", "Choose the category of service you prefer."},
@@ -228,7 +219,7 @@ public class SalesPortalService {
     }
 
     private void selectProduct(Page page, String product, String amount) {
-        log.debug("Seleccionando producto: {}", product);
+        log.info("Seleccionando producto: {}", product);
 
         util.waitForAnyText(page,
                 new String[]{"Seleccione la categoría del servicio que prefieras.", "Choose the category of service you prefer."},
@@ -237,21 +228,15 @@ public class SalesPortalService {
         clickCarrierOrProduct(page, product, "Producto");
 
         String[] amountSelectors = {
-                "div[id=\"input-variable-amount\"]",
-                "input[type=\"text\"]",
-                "input[inputmode*=\"decimal\"]",
+                "div#input-variable-amount",
+                "input[inputmode='decimal']",
         };
-        boolean filled = util.tryFillAmount(
-                page,
-                amountSelectors,
-                amount,
-                "Campo de monto de la transacción"
-        );
 
-        if (!filled) {
-            log.debug("Producto sin rango de precio, se omite el monto");
+        if (util.isElementVisible(page, amountSelectors)) {
+            util.fillWithSelectorOptions(page, amountSelectors, amount, "Campo de monto");
+        } else {
+            log.info("Producto con precio fijo, se omite el monto");
         }
-
     }
 
     private void clickCarrierOrProduct(Page page, String item, String type) {
@@ -269,7 +254,7 @@ public class SalesPortalService {
 
 
     private void enterPhoneNumber(Page page, String phoneNumber) {
-        log.debug("Ingresando numero de telefono: {}", phoneNumber);
+        log.info("Ingresando numero de telefono: {}", phoneNumber);
 
         util.waitForAnyText(page,
                 new String[]{"Mobile Number", "Número Móvil"},
@@ -293,29 +278,26 @@ public class SalesPortalService {
     }
 
     private void enterClerkId(Page page, String clerkId) {
-        log.debug("Ingresando ID de empleado: {}", clerkId);
-
-//        util.waitForAnyText(page,
-//                new String[]{"Clerk ID", "ID del empleado"},
-//                "Texto de ID de Empleado");
-
-        String[] passwordSelectors = {
-                "input[inputmode=\"numeric\"]",
-                "input[type=\"text\"]",
-                "input[name*=\"clerk\"]",
-                "input[name*=\"employee\"]",
-                "input[placeholder*=\"ID\"]"
+        String[] clerkSelectors = {
+                "input[inputmode='numeric'][placeholder='0000']",
+                "input[inputmode='numeric']",
+                "input[placeholder='0000']",
         };
 
-        util.fillWithSelectorOptions(page, passwordSelectors, clerkId, "Campo de ID de empleado");
+        if (util.isElementVisible(page, clerkSelectors)) {
+            util.fillWithSelectorOptions(page, clerkSelectors, clerkId, "Campo de monto");
+            confirmButton(page);
+        } else {
+            log.info("ClerkId no encontrado, se omite el campo");
+        }
     }
 
     private void confirmButton(Page page) {
-        log.debug("Confirmando transacción");
+        log.info("Confirmando transacción");
 
         String[] confirmSelectors = {
-                "button:has-text(\"Confirm\")",
-                "button:has-text(\"Confirmar\")",
+                "button:has-text('Confirm')",
+                "button:has-text('Confirmar')",
                 "button:text('Confirm')",
                 "button:text('Confirmar')",
         };
@@ -326,7 +308,7 @@ public class SalesPortalService {
     }
 
     private String getTransactionReceipt(Page page) {
-        log.debug("Obteniendo recibo de transacción");
+        log.info("Obteniendo recibo de transacción");
 
         Locator receiptElement = page.locator("#TransactionDetails");
         receiptElement.waitFor(new Locator.WaitForOptions()
@@ -351,7 +333,7 @@ public class SalesPortalService {
             throw new RuntimeException("Recibo no contiene información suficiente");
         }
 
-        log.debug("Recibo obtenido exitosamente");
+        log.info("Recibo obtenido exitosamente");
         return receipt;
     }
 
