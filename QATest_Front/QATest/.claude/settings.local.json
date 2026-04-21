@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(winget upgrade:*)",
+      "Edit",
+      "Bash(npm run *)",
+      "Bash(npx vite *)",
+      "Read(//dev/**)"
+    ]
+  }
+}

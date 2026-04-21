@@ -94,17 +94,16 @@
       <span v-if="!isCollapsed" class="ml-3">Audit</span>
     </RouterLink>
 
-    <form @submit.prevent="handleLogout">
-    <Button
+    <button
+      @click="handleLogout"
       :class="[
-        'flex items-center py-2 hover:bg-slate-700 rounded transition-all duration-300 ease-in-out',
+        'flex items-center w-full py-2 hover:bg-slate-700 rounded transition-all duration-300 ease-in-out',
         isCollapsed ? 'justify-center' : 'px-3',
       ]"
     >
       <i class="pi pi-sign-out text-lg"></i>
       <span v-if="!isCollapsed" class="ml-3">Exit</span>
-    </Button>
-    </form>
+    </button>
   </nav>
 
   <!-- 🔹 Footer del Sidebar -->
