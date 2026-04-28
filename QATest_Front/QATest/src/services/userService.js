@@ -19,6 +19,10 @@ export default {
     return apiClient.put(`${resource}/${id}`, userRequest);
   },
 
+  updateStatus(id, status) {
+    return apiClient.patch(`${resource}/${id}/status`, { status });
+  },
+
   delete(id) {
     return apiClient.delete(`${resource}/${id}`);
   }

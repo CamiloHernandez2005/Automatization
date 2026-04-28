@@ -584,13 +584,9 @@ const deleteUser = async () => {
 
 const toggleUserStatus = async (data) => {
   try {
-    console.log('🔄 Toggling user status:', data)
-
     const newStatus = !Boolean(data.status)
-    console.log('📤 Sending new status:', newStatus)
 
-    // Enviar solo el campo status para el toggle
-    await UserService.update(data.id, { status: newStatus })
+    await UserService.updateStatus(data.id, newStatus)
 
     showSuccess(
       `User "${data.fullName}" ${newStatus ? 'activated' : 'deactivated'} successfully`,

@@ -49,6 +49,10 @@ public class User {
         this.password = Objects.requireNonNull(hashedPassword, "password cannot be null");
     }
 
+    public void changeStatus(Boolean status) {
+        this.status = Objects.requireNonNull(status, "status cannot be null");
+    }
+
     public void updateData(String fullName,
                            String email,
                            String password,

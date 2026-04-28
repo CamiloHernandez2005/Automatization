@@ -1,10 +1,12 @@
 package com.example.demo.adapter.user.inbound.controllers;
 
 
+import com.example.demo.adapter.user.inbound.dto.user.StatusRequest;
 import com.example.demo.adapter.user.inbound.dto.user.UserRequest;
 import com.example.demo.adapter.user.inbound.dto.user.UserResponse;
 import com.example.demo.adapter.user.inbound.mapper.UserMapper;
 import com.example.demo.application.users.port.in.*;
+import com.example.demo.application.users.port.in.UpdateUserStatusUseCase;
 import com.example.demo.domain.User;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -19,15 +21,17 @@ public class UserController {
     private final CreateUserUseCase createUserUseCase;
     private final GetAllUsersUseCase getAllUsersUseCase;
     private final UpdateUserUseCase updateUserUseCase;
+    private final UpdateUserStatusUseCase updateUserStatusUseCase;
     private final DeleteUserUseCase deleteUserUseCase;
     private final GetUserUseCase getUserUseCase;
     private final UserMapper mapper;
 
 
-    public UserController(CreateUserUseCase createUserUseCase, GetAllUsersUseCase getAllUsersUseCase, UpdateUserUseCase updateUserUseCase, DeleteUserUseCase deleteUserUseCase, GetUserUseCase getUserUseCase, UserMapper mapper) {
+    public UserController(CreateUserUseCase createUserUseCase, GetAllUsersUseCase getAllUsersUseCase, UpdateUserUseCase updateUserUseCase, UpdateUserStatusUseCase updateUserStatusUseCase, DeleteUserUseCase deleteUserUseCase, GetUserUseCase getUserUseCase, UserMapper mapper) {
         this.createUserUseCase = createUserUseCase;
         this.getAllUsersUseCase = getAllUsersUseCase;
         this.updateUserUseCase = updateUserUseCase;
+        this.updateUserStatusUseCase = updateUserStatusUseCase;
         this.deleteUserUseCase = deleteUserUseCase;
         this.getUserUseCase = getUserUseCase;
         this.mapper = mapper;
@@ -66,6 +70,12 @@ public class UserController {
                 request.role(),
                 request.status()
         );
+        return ResponseEntity.ok(mapper.toResponse(updated));
+    }
+
+    @PatchMapping("/{id}/status")
+    public ResponseEntity<UserResponse> updateStatus(@PathVariable Long id, @RequestBody StatusRequest request) {
+        User updated = updateUserStatusUseCase.updateStatus(id, request.status());
         return ResponseEntity.ok(mapper.toResponse(updated));
     }
 

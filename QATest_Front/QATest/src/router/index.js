@@ -7,7 +7,6 @@ import Components from '@/views/admin/Components.vue'
 import Tests from '@/views/admin/Tests.vue'
 import Users from '@/views/admin/Users.vue'
 import Audit from '@/views/admin/Audit.vue'
-import Daily_notes from '@/views/admin/DailyNotes.vue'
 
 const routes = [
   { path: '/', component: Login },
@@ -21,8 +20,7 @@ const routes = [
       { path: 'tests', component: Tests },
       { path: 'components', component: Components },
       { path: 'users', component: Users },
-      { path: 'audit', component: Audit },
-      { path: 'daily_notes', component: Daily_notes }
+      { path: 'audit', component: Audit }
     ]
   }
 ]

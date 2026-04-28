@@ -27,7 +27,9 @@ public class UpdateUserService implements UpdateUserUseCase {
                         )
                 );
 
-        String encryptedPassword = passwordHasherPort.hash(password);
+        String encryptedPassword = (password != null && !password.isBlank())
+                ? passwordHasherPort.hash(password)
+                : existing.getPassword();
         existing.updateData(fullName,email,encryptedPassword,role,status);
         return userRepositoryPort.save(existing);
     }
