@@ -1,0 +1,13 @@
+# Reference for the environment variables consumed by application.properties.
+# Set these in your shell, IDE run config, CI/CD secret store, or a vault.
+#
+#   DB_USERNAME=<your-db-user>
+#   DB_PASSWORD=<your-db-password>
+#   JWT_SECRET=<a-long-random-string>
+#   JWT_EXPIRATION=86400000   # optional; ms; defaults to 86_400_000
+#
+# To run the app locally:
+#   DB_USERNAME=jdtt DB_PASSWORD=*** JWT_SECRET=*** mvn spring-boot:run
+#
+# To run mvn test (which boots the Spring context for DemoApplicationTests):
+#   DB_USERNAME=jdtt DB_PASSWORD=*** JWT_SECRET=*** mvn test

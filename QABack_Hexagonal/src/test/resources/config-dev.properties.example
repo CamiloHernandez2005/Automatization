@@ -1,0 +1,51 @@
+# Copy to config-dev.properties and adjust values to your local dev environment.
+# Never commit real credentials in versioned files.
+
+app.baseUrl=http://<host>:<port>/login
+app.smokeUrl=http://<host>:<port>/
+
+login.username=<your-test-user>
+login.password=<your-test-password>
+
+playwright.headed=false
+playwright.timeout.short.ms=1000
+playwright.timeout.default.ms=5000
+playwright.timeout.long.ms=10000
+
+# PC Terminal flow (consumed by PCTerminalTest)
+pcterminal.login.username=<pcterminal-test-user>
+pcterminal.login.password=<pcterminal-test-password>
+pcterminal.product=<product-to-search>
+
+# Tipo de flujo: TOP_UP | PIN | BILL_PAYMENT | CRYPTO | ACTIVATION | PORT_IN | TOOL
+pcterminal.flowType=TOP_UP
+
+# Flag global del clerkId (aplica a todos los flujos)
+pcterminal.clerkId.enabled=false
+pcterminal.clerkId=
+
+# TOP_UP
+pcterminal.phoneNumber.enabled=false
+pcterminal.phoneNumber=
+pcterminal.amount=
+
+# PIN
+pcterminal.pin.amount=
+
+# BILL_PAYMENT
+pcterminal.bill.accountNumber=
+pcterminal.bill.amount=
+
+# CRYPTO
+pcterminal.crypto.wallet=
+pcterminal.crypto.amount=
+
+# ACTIVATION
+pcterminal.activation.iccid=
+pcterminal.activation.imei=
+
+# PORT_IN
+pcterminal.portin.number=
+pcterminal.portin.carrier=
+pcterminal.portin.account=
+pcterminal.portin.pin=

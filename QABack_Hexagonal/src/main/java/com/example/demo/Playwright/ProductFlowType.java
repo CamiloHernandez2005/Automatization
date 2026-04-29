@@ -24,7 +24,7 @@ public enum ProductFlowType {
     }
 
     public String getDisplayName(Locale locale) {
-        if (locale != null && locale.getLanguage().equals("es")) {
+    if (locale != null && locale.getLanguage().equals("es")) {
             return spanishName;
         }
         return englishName;

@@ -7,6 +7,7 @@ import com.microsoft.playwright.options.LoadState;
 import com.microsoft.playwright.options.WaitForSelectorState;
 import com.microsoft.playwright.options.WaitUntilState;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 
@@ -17,13 +18,31 @@ public class SalesPortalService {
     private final ComponentRegionRepositoryPort regionRepository;
     private final PlaywrightUtils util;
 
+    @Autowired
     public SalesPortalService(ComponentRegionRepositoryPort regionRepository, PlaywrightUtils util) {
         this.regionRepository = regionRepository;
         this.util = util;
     }
 
+    /**
+     * Convenience constructor for use outside of the Spring container — e.g. from
+     * the programmatic TestRunner — when the URL is already known and no DB
+     * resolution of {@link ComponentRegion} is needed. Calling
+     * {@link #runSalesPortalTest(TestDTO)} on an instance built with this
+     * constructor will throw because there is no repository to resolve the region.
+     * Use {@link #runSalesPortalTest(TestDTO, String)} instead.
+     */
+    public SalesPortalService(PlaywrightUtils util) {
+        this(null, util);
+    }
+
 
     public String runSalesPortalTest(TestDTO request) {
+        if (regionRepository == null) {
+            throw new IllegalStateException(
+                    "SalesPortalService fue construido sin ComponentRegionRepositoryPort; " +
+                            "usa runSalesPortalTest(TestDTO, String url).");
+        }
         log.info("Iniciando test para región ID: {}, Usuario: {}",
                 request.getRegionId(), request.getUsername());
 
@@ -32,7 +51,15 @@ public class SalesPortalService {
                 .orElseThrow(() -> new RuntimeException("No se encontró la región"));
 
         String url = util.buildUrl(region);
+        return runSalesPortalTest(request, url);
+    }
 
+    /**
+     * Runs the sales-portal flow against a pre-resolved URL, skipping the DB
+     * lookup. Suitable for the programmatic test runner where the target URL
+     * comes from {@code config-{env}.properties} (TestConfig).
+     */
+    public String runSalesPortalTest(TestDTO request, String url) {
         log.info("URL de destino: {}", url);
 
         try (Playwright playwright = Playwright.create()) {
@@ -89,11 +116,11 @@ public class SalesPortalService {
             Locator dialog = page.locator("button[aria-label=\"Close\"], button[aria-label=\"Cerrar\"]");
             dialog.waitFor(new Locator.WaitForOptions()
                     .setState(WaitForSelectorState.ATTACHED)
-                    .setTimeout(util.SHORT_TIMEOUT.toMillis()));
+                    .setTimeout(util.shortTimeout().toMillis()));
 
             Locator closeButton = page.locator("button[aria-label=\"Close\"], button[aria-label=\"Cerrar\"]");
             closeButton.click(new Locator.ClickOptions()
-                    .setTimeout(util.SHORT_TIMEOUT.toMillis()));
+                    .setTimeout(util.shortTimeout().toMillis()));
 
 
             log.info("Diálogo modal cerrado exitosamente");
@@ -110,7 +137,7 @@ public class SalesPortalService {
                 page.getByText(message, new Page.GetByTextOptions().setExact(false))
                         .waitFor(new Locator.WaitForOptions()
                                 .setState(WaitForSelectorState.VISIBLE)
-                                .setTimeout(util.SHORT_TIMEOUT.toMillis()));
+                                .setTimeout(util.shortTimeout().toMillis()));
                 log.info("Login verificado con mensaje: {}", message);
                 return;
             } catch (Exception e) {
@@ -313,7 +340,7 @@ public class SalesPortalService {
         Locator receiptElement = page.locator("#TransactionDetails");
         receiptElement.waitFor(new Locator.WaitForOptions()
                 .setState(WaitForSelectorState.VISIBLE)
-                .setTimeout(util.LONG_TIMEOUT.toMillis()));
+                .setTimeout(util.longTimeout().toMillis()));
 
         String receipt = "";
         int attempts = 0;

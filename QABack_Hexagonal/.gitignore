@@ -31,3 +31,14 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### Local config — never commit real credentials ###
+# Variables de entorno locales (cargadas por spring-dotenv en arranque)
+.env
+.env.*
+!.env.example
+# Spring local-profile overrides
+src/main/resources/application-local.properties
+src/main/resources/application-*-local.properties
+# Test-runner local overrides (real passwords for staging/prod tests)
+src/test/resources/config-*-local.properties

@@ -1,28 +1,4 @@
-//package com.example.AutomatizationQA.Playwright;
-//
-//import com.example.AutomatizationQA.Models.Region;
-//import com.example.AutomatizationQA.Repositorys.RegionRepository;
-//import com.microsoft.playwright.*;
-//import com.microsoft.playwright.options.WaitForSelectorState;
-//import org.springframework.stereotype.Service;
-//
-//import java.util.List;
-//
-//@Service
-//public class PCTerminalService {
-//
-//    private final RegionRepository regionRepository;
-//
-//    public PCTerminalService(RegionRepository regionRepository) {
-//        this.regionRepository = regionRepository;
-//    }
-//
-//    public String runPctTest(TestDTO request) {
-//        Region region = regionRepository.findById(request.getRegionId())
-//                .orElseThrow(() -> new RuntimeException("Region not found with id " + request.getRegionId()));
-//
-//        String url = "http://" + region.getIp() + ":" + region.getPort();
-//
+
 //        try (Playwright playwright = Playwright.create()) {
 //            Browser browser = playwright.chromium()
 //                    .launch(new BrowserType.LaunchOptions().setHeadless(false));
@@ -89,6 +65,3 @@
 //        } catch (Exception e) {
 //            throw new RuntimeException(e.getMessage(), e);
 //        }
-//    }
-//
-//}

@@ -15,9 +15,40 @@ import java.util.Arrays;
 @Slf4j
 public class PlaywrightUtils {
 
-    public static final Duration DEFAULT_TIMEOUT = Duration.ofSeconds(5);
-    public static final Duration SHORT_TIMEOUT = Duration.ofSeconds(1);
-    public static final Duration LONG_TIMEOUT = Duration.ofSeconds(10);
+    // Defaults preserve the previous hardcoded behavior. Override at runtime via
+    // system properties (set by TestConfig from config-{env}.properties or by -D flags).
+    private static final long DEFAULT_SHORT_MS   = 1_000L;
+    private static final long DEFAULT_DEFAULT_MS = 5_000L;
+    private static final long DEFAULT_LONG_MS    = 10_000L;
+
+    private static final String KEY_SHORT_MS   = "playwright.timeout.short.ms";
+    private static final String KEY_DEFAULT_MS = "playwright.timeout.default.ms";
+    private static final String KEY_LONG_MS    = "playwright.timeout.long.ms";
+    private static final String KEY_HEADED     = "playwright.headed";
+
+    public Duration shortTimeout() {
+        return Duration.ofMillis(readMs(KEY_SHORT_MS, DEFAULT_SHORT_MS));
+    }
+
+    public Duration defaultTimeout() {
+        return Duration.ofMillis(readMs(KEY_DEFAULT_MS, DEFAULT_DEFAULT_MS));
+    }
+
+    public Duration longTimeout() {
+        return Duration.ofMillis(readMs(KEY_LONG_MS, DEFAULT_LONG_MS));
+    }
+
+    private static long readMs(String key, long fallback) {
+        String v = System.getProperty(key);
+        if (v == null) return fallback;
+        try {
+            return Long.parseLong(v.trim());
+        } catch (NumberFormatException e) {
+            log.warn("System property '{}' no es un long válido ('{}'), usando default {} ms",
+                    key, v, fallback);
+            return fallback;
+        }
+    }
 
     public String buildUrl(ComponentRegion region) {
         return String.format("http://%s:%s",
@@ -26,10 +57,11 @@ public class PlaywrightUtils {
     }
 
     public Browser createBrowser(Playwright playwright) {
+        boolean headed = Boolean.parseBoolean(System.getProperty(KEY_HEADED, "false"));
         return playwright.chromium().launch(new BrowserType.LaunchOptions()
-                .setHeadless(false)
+                .setHeadless(!headed)
                 .setArgs(Arrays.asList("--start-maximized"))
-                .setTimeout(LONG_TIMEOUT.toMillis()));
+                .setTimeout(longTimeout().toMillis()));
     }
 
     public Browser.NewContextOptions configureContext() {
@@ -40,9 +72,9 @@ public class PlaywrightUtils {
     }
 
     public void configurePageDefaults(Page page) {
-        page.setDefaultTimeout(DEFAULT_TIMEOUT.toMillis());
-        page.setDefaultNavigationTimeout(DEFAULT_TIMEOUT.toMillis());
-
+        long defaultMs = defaultTimeout().toMillis();
+        page.setDefaultTimeout(defaultMs);
+        page.setDefaultNavigationTimeout(defaultMs);
     }
 
     // ============ MÉTODOS DE UTILIDAD ============
@@ -69,7 +101,7 @@ public class PlaywrightUtils {
         for (int attempt = 1; attempt <= maxAttempts; attempt++) {
             try {
                 page.locator(selector).click(new Locator.ClickOptions()
-                        .setTimeout(SHORT_TIMEOUT.toMillis()));
+                        .setTimeout(shortTimeout().toMillis()));
                 log.info("{} clickeado exitosamente", buttonName);
                 return;
             } catch (Exception e) {
@@ -115,7 +147,7 @@ public class PlaywrightUtils {
 
                 locator.waitFor(new Locator.WaitForOptions()
                         .setState(WaitForSelectorState.VISIBLE)
-                        .setTimeout(SHORT_TIMEOUT.toMillis()));
+                        .setTimeout(shortTimeout().toMillis()));
 
                 locator.fill(value);
                 log.info("{} completado con selector: {}", fieldName, selector);
@@ -133,7 +165,7 @@ public class PlaywrightUtils {
                 page.getByText(text, new Page.GetByTextOptions().setExact(false))
                         .waitFor(new Locator.WaitForOptions()
                                 .setState(WaitForSelectorState.VISIBLE)
-                                .setTimeout(SHORT_TIMEOUT.toMillis()));
+                                .setTimeout(shortTimeout().toMillis()));
                 log.info("{} encontrado con texto: {}", description, text);
                 return;
             } catch (Exception e) {

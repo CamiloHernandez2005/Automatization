@@ -63,6 +63,18 @@
             <artifactId>mssql-jdbc</artifactId>
             <scope>runtime</scope>
         </dependency>
+        <!--
+            spring-dotenv: registra el archivo .env de la raíz del proyecto como
+            una PropertySource adicional de Spring Boot, de modo que los
+            placeholders ${DB_USERNAME}, ${JWT_SECRET}, etc. en application.properties
+            resuelvan automáticamente desde .env. Variables del entorno del SO
+            siguen teniendo precedencia sobre el archivo.
+        -->
+        <dependency>
+            <groupId>me.paulschwarz</groupId>
+            <artifactId>spring-dotenv</artifactId>
+            <version>4.0.0</version>
+        </dependency>
         <dependency>
             <groupId>io.jsonwebtoken</groupId>
             <artifactId>jjwt-api</artifactId>
@@ -91,6 +103,13 @@
 			<artifactId>playwright</artifactId>
 			<version>1.44.0</version>
 		</dependency>
+
+		<!-- JUnit Platform Launcher: needed at runtime by TestRunner to discover/execute tests programmatically. -->
+		<dependency>
+			<groupId>org.junit.platform</groupId>
+			<artifactId>junit-platform-launcher</artifactId>
+			<scope>test</scope>
+		</dependency>
     </dependencies>
 
 	<build>
@@ -98,6 +117,51 @@
 			<plugin>
 				<groupId>org.springframework.boot</groupId>
 				<artifactId>spring-boot-maven-plugin</artifactId>
+				<configuration>
+					<!-- Main fat-jar keeps DemoApplication as entry point; TestRunner ships in a separate assembly artifact. -->
+					<mainClass>com.example.demo.DemoApplication</mainClass>
+				</configuration>
+			</plugin>
+
+			<!--
+				Builds an additional, self-contained JAR with classifier `tests-jar-with-dependencies`
+				whose mainClass is TestRunner. Includes target/classes + target/test-classes + all
+				test-scope dependencies (JUnit Platform engine/launcher, Playwright, etc.) flattened.
+				Independent from the Spring Boot fat-jar produced by spring-boot-maven-plugin.
+			-->
+			<plugin>
+				<artifactId>maven-assembly-plugin</artifactId>
+				<executions>
+					<execution>
+						<id>tests-runner-assembly</id>
+						<phase>package</phase>
+						<goals>
+							<goal>single</goal>
+						</goals>
+						<configuration>
+							<descriptors>
+								<descriptor>src/assembly/tests-jar.xml</descriptor>
+							</descriptors>
+							<archive>
+								<manifest>
+									<mainClass>com.example.demo.TestRunner</mainClass>
+								</manifest>
+							</archive>
+							<appendAssemblyId>true</appendAssemblyId>
+						</configuration>
+					</execution>
+				</executions>
+			</plugin>
+
+			<!-- Allows running TestRunner without packaging: mvn test-compile exec:java -Dexec.mainClass=... -->
+			<plugin>
+				<groupId>org.codehaus.mojo</groupId>
+				<artifactId>exec-maven-plugin</artifactId>
+				<version>3.5.0</version>
+				<configuration>
+					<mainClass>com.example.demo.TestRunner</mainClass>
+					<classpathScope>test</classpathScope>
+				</configuration>
 			</plugin>
 		</plugins>
 	</build>

@@ -1,0 +1,51 @@
+# Copy to config-staging.properties and fill values to run against staging.
+# Real credentials must come from a vault or -Dlogin.password=... at runtime.
+
+app.baseUrl=https://staging.<your-domain>/login
+app.smokeUrl=https://staging.<your-domain>/
+
+login.username=<staging-test-user>
+login.password=CHANGEME
+
+playwright.headed=false
+playwright.timeout.short.ms=2000
+playwright.timeout.default.ms=8000
+playwright.timeout.long.ms=20000
+
+# PC Terminal flow (consumed by PCTerminalTest)
+pcterminal.login.username=<pcterminal-staging-user>
+pcterminal.login.password=CHANGEME
+pcterminal.product=<product-to-search>
+
+# Tipo de flujo: TOP_UP | PIN | BILL_PAYMENT | CRYPTO | ACTIVATION | PORT_IN | TOOL
+pcterminal.flowType=TOP_UP
+
+# Flag global del clerkId (aplica a todos los flujos)
+pcterminal.clerkId.enabled=false
+pcterminal.clerkId=
+
+# TOP_UP
+pcterminal.phoneNumber.enabled=false
+pcterminal.phoneNumber=
+pcterminal.amount=
+
+# PIN
+pcterminal.pin.amount=
+
+# BILL_PAYMENT
+pcterminal.bill.accountNumber=
+pcterminal.bill.amount=
+
+# CRYPTO
+pcterminal.crypto.wallet=
+pcterminal.crypto.amount=
+
+# ACTIVATION
+pcterminal.activation.iccid=
+pcterminal.activation.imei=
+
+# PORT_IN
+pcterminal.portin.number=
+pcterminal.portin.carrier=
+pcterminal.portin.account=
+pcterminal.portin.pin=

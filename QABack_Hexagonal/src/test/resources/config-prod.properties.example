@@ -1,0 +1,53 @@
+# Copy to config-prod.properties for prod-pointing smoke tests.
+# Production runs MUST source credentials from a secret store, never from a file.
+
+app.baseUrl=https://<your-prod-domain>/login
+app.smokeUrl=https://<your-prod-domain>/
+
+# DO NOT commit prod credentials. Pass them with -Dlogin.password=... at run time.
+login.username=<prod-readonly-user>
+login.password=CHANGEME
+
+playwright.headed=false
+playwright.timeout.short.ms=3000
+playwright.timeout.default.ms=10000
+playwright.timeout.long.ms=30000
+
+# PC Terminal flow (consumed by PCTerminalTest)
+# DO NOT commit prod credentials. Pass them with -Dpcterminal.login.password=... at run time.
+pcterminal.login.username=<pcterminal-prod-readonly-user>
+pcterminal.login.password=CHANGEME
+pcterminal.product=<product-to-search>
+
+# Tipo de flujo: TOP_UP | PIN | BILL_PAYMENT | CRYPTO | ACTIVATION | PORT_IN | TOOL
+pcterminal.flowType=TOP_UP
+
+# Flag global del clerkId (aplica a todos los flujos)
+pcterminal.clerkId.enabled=false
+pcterminal.clerkId=
+
+# TOP_UP
+pcterminal.phoneNumber.enabled=false
+pcterminal.phoneNumber=
+pcterminal.amount=
+
+# PIN
+pcterminal.pin.amount=
+
+# BILL_PAYMENT
+pcterminal.bill.accountNumber=
+pcterminal.bill.amount=
+
+# CRYPTO
+pcterminal.crypto.wallet=
+pcterminal.crypto.amount=
+
+# ACTIVATION
+pcterminal.activation.iccid=
+pcterminal.activation.imei=
+
+# PORT_IN
+pcterminal.portin.number=
+pcterminal.portin.carrier=
+pcterminal.portin.account=
+pcterminal.portin.pin=
