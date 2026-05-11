@@ -1,6 +1,14 @@
 <template>
   <div class="p-6 text-sm">
 
+    <!-- ── Top loading bar ─────────────────────────────── -->
+    <Transition name="top-loader-fade">
+      <div v-if="isLoading" class="top-loader">
+        <div class="top-loader-bar" />
+      </div>
+    </Transition>
+
+
     <!-- ── Header ─────────────────────────────────────── -->
     <div class="bg-gradient-to-r from-slate-800 to-slate-700 rounded-2xl px-6 py-5 mb-5 shadow-lg">
       <div class="flex items-center justify-between flex-wrap gap-3">
@@ -21,7 +29,82 @@
 
           <div class="w-px h-5 bg-slate-500 mx-1" />
 
+          <button class="btn-header btn-header-new" @click="openRunModal">+ New</button>
           <button class="btn-header" @click="loadContainers">⟳ Refresh</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Server status ───────────────────────────────── -->
+    <div v-if="serverError" class="mb-4 px-4 py-3 rounded-xl border border-red-200 bg-red-50 text-red-700 text-xs flex items-center gap-2">
+      <span>⚠</span>
+      <span class="flex-1">Server stats unavailable: <span class="font-mono">{{ serverError }}</span></span>
+      <button class="btn-run-secondary" @click="loadServer">⟳ Retry</button>
+    </div>
+    <div v-else-if="!serverInfo" class="mb-4 px-4 py-3 rounded-xl border border-gray-200 bg-gray-50 text-gray-500 text-xs flex items-center gap-2">
+      <span class="inline-block animate-spin">⟳</span>
+      Loading server stats…
+    </div>
+    <div v-if="serverInfo" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+      <div class="server-card">
+        <div class="server-card-head">
+          <span class="server-card-title">🖥 Memory</span>
+          <span v-if="serverMemPercent !== null" class="server-card-pct">{{ serverMemPercent }}%</span>
+        </div>
+        <div class="server-bar">
+          <div class="server-bar-fill" :class="pctClass(serverMemPercent)" :style="{ width: (serverMemPercent ?? 0) + '%' }" />
+        </div>
+        <div class="server-card-foot">
+          {{ formatBytes(serverInfo.server.memory?.used) }} / {{ formatBytes(serverInfo.server.memory?.total) }}
+        </div>
+      </div>
+
+      <div class="server-card">
+        <div class="server-card-head">
+          <span class="server-card-title">💾 Server storage</span>
+          <span v-if="serverDisk" class="server-card-pct">{{ serverDisk.percent }}%</span>
+        </div>
+        <div class="server-bar">
+          <div class="server-bar-fill" :class="pctClass(serverDisk?.percent)" :style="{ width: (serverDisk?.percent ?? 0) + '%' }" />
+        </div>
+        <div class="server-card-foot">
+          {{ formatBytes(serverDisk?.used) }} / {{ formatBytes(serverDisk?.total) }}
+          <span class="text-gray-400"> · free {{ formatBytes(serverDisk?.free) }}</span>
+        </div>
+      </div>
+
+      <div class="server-card">
+        <div class="server-card-head">
+          <span class="server-card-title">📜 Logs folder</span>
+          <span class="server-card-pct">
+            <span v-if="logsSize != null">{{ formatBytes(logsSize) }}</span>
+            <span v-else class="text-gray-400 text-xs italic" title="añade folders.logs_size al payload de /server">n/a</span>
+          </span>
+        </div>
+        <div class="server-bar">
+          <div class="server-bar-fill bg-emerald-500" :style="{ width: (logsShareOfDisk ?? 0) + '%' }" />
+        </div>
+        <div class="server-card-foot">
+          <span v-if="logsSize != null && serverDisk?.total">
+            {{ logsShareOfDisk }}% of disk · /opt/logs
+          </span>
+          <span v-else>/opt/logs</span>
+        </div>
+      </div>
+
+      <div class="server-card">
+        <div class="server-card-head">
+          <span class="server-card-title">🐳 Containers</span>
+          <span class="server-card-pct text-emerald-600">{{ serverInfo.containers?.memory?.running_count ?? 0 }} running</span>
+        </div>
+        <div class="text-xs text-gray-600 mt-2 leading-snug">
+          Mem: <span class="font-mono">{{ formatBytes(serverInfo.containers?.memory?.total_bytes) }}</span>
+        </div>
+        <div class="text-[11px] text-gray-500 mt-1 space-y-0.5 max-h-12 overflow-hidden">
+          <div v-for="d in dockerDfRows" :key="d.Type" class="flex justify-between">
+            <span>{{ d.Type }}</span>
+            <span class="font-mono">{{ d.Size }}</span>
+          </div>
         </div>
       </div>
     </div>
@@ -73,6 +156,12 @@
             <th class="th-base" @click="sortBy('status')">
               Status <span class="sort-icon">{{ sortIcon('status') }}</span>
             </th>
+            <th class="th-base" @click="sortBy('cpu')">
+              CPU <span class="sort-icon">{{ sortIcon('cpu') }}</span>
+            </th>
+            <th class="th-base" @click="sortBy('memory')">
+              Memory <span class="sort-icon">{{ sortIcon('memory') }}</span>
+            </th>
             <th class="th-base" @click="sortBy('image')">
               Image <span class="sort-icon">{{ sortIcon('image') }}</span>
             </th>
@@ -117,15 +206,26 @@
                 {{ stateLabel(c.status) }}
               </span>
             </td>
+            <td class="td-base text-xs">
+              <span v-if="statsByName[c.name]" class="font-mono" :class="cpuClass(statsByName[c.name].cpu_perc)">{{ statsByName[c.name].cpu_perc }}</span>
+              <span v-else class="text-gray-300">—</span>
+            </td>
+            <td class="td-base text-xs">
+              <span v-if="statsByName[c.name]" class="font-mono" :title="statsByName[c.name].mem_usage">
+                {{ statsByName[c.name].mem_perc }}
+                <span class="text-gray-400 ml-1">{{ statsByName[c.name].mem_usage.split('/')[0].trim() }}</span>
+              </span>
+              <span v-else class="text-gray-300">—</span>
+            </td>
             <td class="td-base truncate max-w-[220px] text-gray-600 font-mono text-xs" :title="c.image">{{ c.image }}</td>
             <td class="td-base text-gray-500 text-xs">{{ formatCreated(c.created) }}</td>
             <td class="td-base text-gray-500 text-xs font-mono">{{ formatPorts(c.ports) }}</td>
           </tr>
         </tbody>
 
-        <tbody v-else-if="loading">
+        <tbody v-else-if="loading && !containers.length">
           <tr>
-            <td colspan="6" class="text-center py-16 text-gray-400 text-sm">
+            <td colspan="8" class="text-center py-16 text-gray-400 text-sm">
               <span class="inline-block animate-spin mr-2">⟳</span> Loading containers...
             </td>
           </tr>
@@ -133,7 +233,7 @@
 
         <tbody v-else>
           <tr>
-            <td colspan="6" class="text-center py-16 text-gray-400 text-sm">No containers found</td>
+            <td colspan="8" class="text-center py-16 text-gray-400 text-sm">No containers found</td>
           </tr>
         </tbody>
       </table>
@@ -179,6 +279,271 @@
       </div>
     </div>
 
+
+    <!-- ── Modal: Run new container ────────────────────── -->
+    <div v-if="showRunModal" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" @click.self="closeRunModal">
+      <div class="bg-white rounded-2xl shadow-2xl w-[720px] max-w-[95vw] max-h-[92vh] flex flex-col overflow-hidden">
+        <!-- Header -->
+        <div class="flex items-center justify-between px-5 py-3 border-b border-gray-200 bg-gradient-to-r from-slate-800 to-slate-700">
+          <div>
+            <h3 class="text-white font-semibold tracking-tight">Run new container</h3>
+            <p class="text-slate-300 text-[11px]">Pick a Docker Hub image and configure runtime options</p>
+          </div>
+          <button class="text-slate-300 hover:text-white text-lg leading-none" @click="closeRunModal">✕</button>
+        </div>
+
+        <!-- Body -->
+        <div class="flex-1 overflow-y-auto p-5 space-y-5">
+
+          <!-- Image -->
+          <section>
+            <h4 class="section-title">🐳 Image</h4>
+            <div class="text-xs text-gray-500 mb-2">
+              Repository: <span class="font-mono text-slate-700">{{ DOCKERHUB_USER }}/{{ DOCKERHUB_REPO }}</span>
+            </div>
+
+            <div class="flex items-center justify-between mb-2">
+              <label class="run-label !mb-0">
+                Tag
+                <span v-if="dockerHub.loadingTags" class="text-gray-400 ml-1">(loading…)</span>
+                <span v-else-if="runForm.tag" class="text-emerald-600 ml-1">(1 selected)</span>
+                <span v-else-if="dockerHub.tags.length" class="text-gray-400 ml-1">({{ filteredTags.length }} of {{ dockerHub.tags.length }})</span>
+              </label>
+              <button class="btn-run-secondary" :disabled="dockerHub.loadingTags" @click="loadTags">
+                ⟳ Reload
+              </button>
+            </div>
+
+            <div v-if="!runForm.tag" class="relative mb-2">
+              <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none flex items-center">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="11" cy="11" r="8"/>
+                  <path d="m21 21-4.3-4.3"/>
+                </svg>
+              </span>
+              <input
+                v-model="tagFilter"
+                placeholder="Search tag by name…"
+                class="run-input search-input"
+              />
+            </div>
+
+            <div class="border border-gray-200 rounded-lg overflow-hidden bg-white">
+              <div v-if="!dockerHub.tags.length && !dockerHub.loadingTags" class="text-gray-400 text-center py-6 text-xs">
+                No tags
+              </div>
+              <div v-else class="max-h-56 overflow-y-auto">
+                <table class="w-full text-sm">
+                  <thead class="bg-gray-50 sticky top-0 z-10">
+                    <tr>
+                      <th class="tag-th" @click="cycleSort('name')">
+                        Tag <span class="sort-icon">{{ sortIconFor('name') }}</span>
+                      </th>
+                      <th class="tag-th tag-th-date" @click="cycleSort('date')">
+                        Last updated <span class="sort-icon">{{ sortIconFor('date') }}</span>
+                      </th>
+                      <th v-if="runForm.tag" class="tag-th text-right">
+                        <button class="btn-run-secondary !py-0.5" @click="runForm.tag = ''">✕ Clear</button>
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr
+                      v-for="t in displayedTags"
+                      :key="t.name"
+                      class="tag-row-tr"
+                      :class="{ 'tag-row-active': runForm.tag === t.name }"
+                      @click="selectTag(t.name)"
+                    >
+                      <td class="tag-td font-mono">{{ t.name }}</td>
+                      <td class="tag-td text-gray-500 text-xs">{{ formatTagDate(t.last_updated) }}</td>
+                      <td v-if="runForm.tag" class="tag-td text-right text-emerald-600 text-xs font-semibold">✓ selected</td>
+                    </tr>
+                    <tr v-if="!displayedTags.length">
+                      <td :colspan="runForm.tag ? 3 : 2" class="text-center py-6 text-gray-400 text-xs">No matches</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div v-if="fullImage" class="text-xs text-gray-500 mt-2">
+              Full image: <span class="font-mono text-slate-700">{{ fullImage }}</span>
+            </div>
+            <div v-if="dockerHub.error" class="text-xs text-red-600 mt-1">{{ dockerHub.error }}</div>
+          </section>
+
+          <!-- Container -->
+          <section>
+            <h4 class="section-title">⚙️ Container</h4>
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="run-label">Name <span class="text-red-500">*</span></label>
+                <input v-model="runForm.name" class="run-input" placeholder="my-app" />
+              </div>
+              <div>
+                <label class="run-label">Port</label>
+                <input v-model="runForm.port" class="run-input" placeholder="8080 or 8080:80" />
+              </div>
+              <div>
+                <label class="run-label">CPUs</label>
+                <select v-model="runForm.cpus" class="run-select">
+                  <option v-for="opt in CPU_OPTIONS" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                </select>
+              </div>
+              <div>
+                <label class="run-label">Memory</label>
+                <select v-model="runForm.memory" class="run-select">
+                  <option v-for="opt in MEMORY_OPTIONS" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                </select>
+              </div>
+            </div>
+          </section>
+
+          <!-- Volumes & env -->
+          <section>
+            <h4 class="section-title">📁 Volumes &amp; environment</h4>
+
+            <!-- env_file -->
+            <div class="mb-3">
+              <label class="run-label">Env file <span class="text-gray-400 font-normal">(/opt/properties/)</span></label>
+              <div class="flex gap-2">
+                <input v-model="runForm.env_file" class="run-input flex-1 font-mono" placeholder="myapp/prod.env" readonly />
+                <button class="btn-run-secondary" @click="toggleBrowser('properties')">
+                  {{ browser.properties.open ? "Close" : "Browse" }}
+                </button>
+                <button v-if="runForm.env_file" class="btn-run-secondary" @click="runForm.env_file = ''">Clear</button>
+              </div>
+              <div v-if="browser.properties.open" class="picker">
+                <div class="picker-bar">
+                  <button class="picker-crumb" @click="loadProperties('')">/</button>
+                  <template v-for="(seg, i) in pathSegments(browser.properties.path)" :key="i">
+                    <span class="text-gray-400">/</span>
+                    <button class="picker-crumb" @click="loadProperties(joinSegments(pathSegments(browser.properties.path), i))">{{ seg }}</button>
+                  </template>
+                  <span class="ml-auto text-gray-400" v-if="browser.properties.loading">Loading…</span>
+                </div>
+                <input
+                  v-model="browser.properties.filter"
+                  placeholder="Filter…"
+                  class="run-input mb-2 text-xs"
+                />
+                <div class="picker-list">
+                  <div v-if="!filteredPropertyItems.length && !browser.properties.loading" class="text-gray-400 text-center py-4">
+                    {{ browser.properties.items.length ? "No matches" : "Empty" }}
+                  </div>
+                  <button
+                    v-for="item in filteredPropertyItems"
+                    :key="item.path"
+                    class="picker-item"
+                    @click="onPropertiesItemClick(item)"
+                  >
+                    <span>{{ item.type === "directory" ? "📁" : "📄" }}</span>
+                    <span class="font-mono">{{ item.name }}</span>
+                  </button>
+                </div>
+                <div v-if="browser.properties.error" class="text-red-600 text-xs mt-1">{{ browser.properties.error }}</div>
+              </div>
+            </div>
+
+            <!-- logs_folder -->
+            <div class="mb-3">
+              <label class="run-label">Logs folder <span class="text-gray-400 font-normal">(/opt/logs/)</span></label>
+              <div class="flex gap-2">
+                <input v-model="runForm.logs_folder" class="run-input flex-1 font-mono" placeholder="myapp/prod" readonly />
+                <button class="btn-run-secondary" @click="toggleBrowser('logs')">
+                  {{ browser.logs.open ? "Close" : "Browse" }}
+                </button>
+                <button v-if="runForm.logs_folder" class="btn-run-secondary" @click="runForm.logs_folder = ''">Clear</button>
+              </div>
+              <div v-if="browser.logs.open" class="picker">
+                <div class="picker-bar">
+                  <button class="picker-crumb" @click="loadLogs('')">/</button>
+                  <template v-for="(seg, i) in pathSegments(browser.logs.path)" :key="i">
+                    <span class="text-gray-400">/</span>
+                    <button class="picker-crumb" @click="loadLogs(joinSegments(pathSegments(browser.logs.path), i))">{{ seg }}</button>
+                  </template>
+                  <span class="ml-auto text-gray-400" v-if="browser.logs.loading">Loading…</span>
+                </div>
+                <input
+                  v-model="browser.logs.filter"
+                  placeholder="Filter…"
+                  class="run-input mb-2 text-xs"
+                />
+                <div class="picker-list">
+                  <div v-if="!filteredLogItems.length && !browser.logs.loading" class="text-gray-400 text-center py-4">
+                    {{ browser.logs.items.length ? "No matches" : "Empty" }}
+                  </div>
+                  <button
+                    v-for="item in filteredLogItems"
+                    :key="item.path"
+                    class="picker-item"
+                    @click="onLogsItemClick(item)"
+                  >
+                    <span>📁</span>
+                    <span class="font-mono">{{ item.name }}</span>
+                  </button>
+                </div>
+                <div class="flex gap-2 items-center mt-2">
+                  <input
+                    v-model="newFolderName"
+                    placeholder="new-folder-name"
+                    class="run-input flex-1 text-xs"
+                    @keydown.enter.prevent="createLogsFolder"
+                  />
+                  <button class="btn-run-secondary" :disabled="!newFolderName.trim()" @click="createLogsFolder">+ Create</button>
+                  <button class="btn-run-secondary" @click="pickCurrentLogsFolder" :disabled="!browser.logs.path">Use this folder</button>
+                </div>
+                <div v-if="browser.logs.error" class="text-red-600 text-xs mt-1">{{ browser.logs.error }}</div>
+              </div>
+            </div>
+
+            <!-- extra volumes -->
+            <div class="mb-3">
+              <label class="run-label">
+                Extra volumes
+                <span class="text-gray-400 font-normal">(host:container[:ro])</span>
+              </label>
+              <div class="flex gap-2">
+                <input
+                  v-model="newVolume"
+                  class="run-input flex-1 font-mono"
+                  placeholder="/host/path:/container/path"
+                  @keydown.enter.prevent="addVolume"
+                />
+                <button class="btn-run-secondary" :disabled="!isValidVolume(newVolume)" @click="addVolume">+ Add</button>
+              </div>
+              <div v-if="runForm.volumes.length" class="space-y-1 mt-2">
+                <div
+                  v-for="(v, i) in runForm.volumes"
+                  :key="i"
+                  class="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 text-xs font-mono"
+                >
+                  <span class="flex-1 truncate" :title="v">{{ v }}</span>
+                  <button type="button" class="text-red-500 hover:text-red-700 font-bold" @click="removeVolume(i)">✕</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- container log path -->
+            <div>
+              <label class="run-label">Container log path</label>
+              <input v-model="runForm.container_log_path" class="run-input font-mono" placeholder="/app/logs/" />
+            </div>
+          </section>
+
+          <div v-if="runError" class="bg-red-50 border border-red-200 text-red-700 text-xs rounded-lg px-3 py-2 font-mono whitespace-pre-wrap">{{ runError }}</div>
+        </div>
+
+        <!-- Footer -->
+        <div class="flex justify-end gap-2 px-5 py-3 border-t border-gray-200 bg-gray-50">
+          <button class="btn-sm-tw" :disabled="runSubmitting" @click="closeRunModal">Cancel</button>
+          <button class="btn-run" :disabled="!canSubmitRun || runSubmitting" @click="handleRun">
+            {{ runSubmitting ? "Running…" : "Run container" }}
+          </button>
+        </div>
+      </div>
+    </div>
 
     <!-- ── Modal: Logs ─────────────────────────────────── -->
     <div v-if="logsOpen" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" @click.self="closeLogs">
@@ -249,7 +614,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted, onUnmounted, nextTick } from "vue";
+import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } from "vue";
 import {
   getContainers,
   getContainerLogs,
@@ -258,6 +623,12 @@ import {
   stopContainers,
   restartContainers,
   killContainers,
+  getDockerHubTags,
+  listProperties,
+  listLogs,
+  createLogFolder,
+  getAllContainerStats,
+  getServerInfo,
 } from "@/services/containersService";
 
 // ── Main state ────────────────────────────────────────
@@ -275,7 +646,210 @@ const showRunModal = ref(false);
 const activityEntries = ref([]);
 const activityLog  = ref(null);
 
-const runForm = ref({ image: "", name: "", ports: "", env: "", cmd: "" });
+// ── Run wizard state ──────────────────────────────────
+const DOCKERHUB_USER = "qualityassurancebog";
+const DOCKERHUB_REPO = "qarepository";
+
+const DEFAULT_RUN_FORM = () => ({
+  tag: "",
+  name: "",
+  port: "",
+  cpus: "",
+  memory: "",
+  env_file: "",
+  logs_folder: "",
+  container_log_path: "/app/logs/",
+  volumes: [],
+});
+
+const runForm     = ref(DEFAULT_RUN_FORM());
+const runError    = ref("");
+const runSubmitting = ref(false);
+const tagSort     = ref("date-desc");
+const tagFilter   = ref("");
+
+const CPU_OPTIONS = [
+  { value: "",    label: "No limit" },
+  { value: "0.25", label: "0.25 vCPU" },
+  { value: "0.5",  label: "0.5 vCPU" },
+  { value: "1",    label: "1 vCPU" },
+  { value: "1.5",  label: "1.5 vCPU" },
+  { value: "2",    label: "2 vCPU" },
+  { value: "4",    label: "4 vCPU" },
+];
+
+const MEMORY_OPTIONS = [
+  { value: "",     label: "No limit" },
+  { value: "256m", label: "256 MB" },
+  { value: "512m", label: "512 MB" },
+  { value: "1g",   label: "1 GB" },
+  { value: "2g",   label: "2 GB" },
+  { value: "4g",   label: "4 GB" },
+  { value: "8g",   label: "8 GB" },
+];
+
+const dockerHub = reactive({
+  tags: [],
+  loadingTags: false,
+  error: "",
+});
+
+const browser = reactive({
+  properties: { open: false, path: "", items: [], loading: false, error: "", filter: "" },
+  logs:       { open: false, path: "", items: [], loading: false, error: "", filter: "" },
+});
+
+const newFolderName = ref("");
+const newVolume     = ref("");
+
+// ── Stats & server state ──────────────────────────────
+const statsByName = ref({});
+const serverInfo  = ref(null);
+const serverError = ref("");
+
+const serverMemPercent = computed(() => serverInfo.value?.server?.memory?.percent ?? null);
+const serverDisk = computed(() =>
+  serverInfo.value?.server?.disks?.logs
+    ?? serverInfo.value?.server?.disks?.properties
+    ?? null
+);
+const logsSize   = computed(() => serverInfo.value?.server?.folders?.logs_size ?? null);
+
+const logsShareOfDisk = computed(() => {
+  const size = logsSize.value;
+  const total = serverDisk.value?.total;
+  if (size == null || !total) return null;
+  return Math.round((size / total) * 1000) / 10;
+});
+const dockerDfRows     = computed(() => (serverInfo.value?.containers?.disk || []).slice(0, 3));
+
+const isLoading = computed(() => loading.value || runSubmitting.value);
+
+function pctClass(p) {
+  if (p == null) return "bg-gray-300";
+  if (p >= 90) return "bg-red-500";
+  if (p >= 75) return "bg-amber-500";
+  return "bg-emerald-500";
+}
+
+function cpuClass(s = "") {
+  const v = parseFloat(s);
+  if (Number.isNaN(v)) return "text-gray-500";
+  if (v >= 80) return "text-red-600 font-semibold";
+  if (v >= 50) return "text-amber-600 font-semibold";
+  return "text-gray-700";
+}
+
+function formatBytes(b) {
+  if (b == null || Number.isNaN(b)) return "—";
+  const u = ["B", "KB", "MB", "GB", "TB", "PB"];
+  let i = 0;
+  let v = Number(b);
+  while (v >= 1024 && i < u.length - 1) { v /= 1024; i++; }
+  return `${v.toFixed(v >= 10 || i === 0 ? 0 : 1)} ${u[i]}`;
+}
+
+function isValidVolume(v) {
+  if (!v || typeof v !== "string") return false;
+  const t = v.trim();
+  if (!t.includes(":") || t.length < 3) return false;
+  const parts = t.split(":");
+  return parts.length >= 2 && parts.every((p) => p.length > 0);
+}
+
+function addVolume() {
+  const v = newVolume.value.trim();
+  if (!isValidVolume(v) || runForm.value.volumes.includes(v)) return;
+  runForm.value.volumes.push(v);
+  newVolume.value = "";
+}
+
+function removeVolume(i) {
+  runForm.value.volumes.splice(i, 1);
+}
+
+const fullImage = computed(() => {
+  const tag = runForm.value.tag?.trim();
+  if (!tag) return "";
+  return `${DOCKERHUB_USER}/${DOCKERHUB_REPO}:${tag}`;
+});
+
+const filteredTags = computed(() => {
+  const q = tagFilter.value.trim().toLowerCase();
+  let list = q
+    ? dockerHub.tags.filter((t) => t.name.toLowerCase().includes(q))
+    : [...dockerHub.tags];
+  list.sort((a, b) => {
+    switch (tagSort.value) {
+      case "date-asc":  return tagDateValue(a) - tagDateValue(b);
+      case "date-desc": return tagDateValue(b) - tagDateValue(a);
+      case "name-asc":  return a.name.localeCompare(b.name);
+      case "name-desc": return b.name.localeCompare(a.name);
+      default:          return 0;
+    }
+  });
+  return list;
+});
+
+const displayedTags = computed(() => {
+  if (runForm.value.tag) {
+    const found = dockerHub.tags.find((t) => t.name === runForm.value.tag);
+    return found ? [found] : [];
+  }
+  return filteredTags.value;
+});
+
+function selectTag(name) {
+  runForm.value.tag = runForm.value.tag === name ? "" : name;
+}
+
+function cycleSort(col) {
+  if (col === "date") {
+    tagSort.value = tagSort.value === "date-desc" ? "date-asc" : "date-desc";
+  } else if (col === "name") {
+    tagSort.value = tagSort.value === "name-asc" ? "name-desc" : "name-asc";
+  }
+}
+
+function sortIconFor(col) {
+  if (col === "date") {
+    if (tagSort.value === "date-desc") return "↓";
+    if (tagSort.value === "date-asc") return "↑";
+  }
+  if (col === "name") {
+    if (tagSort.value === "name-asc") return "↑";
+    if (tagSort.value === "name-desc") return "↓";
+  }
+  return "↕";
+}
+
+function tagDateValue(t) {
+  const d = t?.last_updated ? new Date(t.last_updated).getTime() : NaN;
+  return Number.isNaN(d) ? 0 : d;
+}
+
+const filteredPropertyItems = computed(() => {
+  const q = browser.properties.filter.trim().toLowerCase();
+  if (!q) return browser.properties.items;
+  return browser.properties.items.filter((i) => i.name.toLowerCase().includes(q));
+});
+
+const filteredLogItems = computed(() => {
+  const q = browser.logs.filter.trim().toLowerCase();
+  if (!q) return browser.logs.items;
+  return browser.logs.items.filter((i) => i.name.toLowerCase().includes(q));
+});
+
+const canSubmitRun = computed(() =>
+  !!runForm.value.tag?.trim() && !!runForm.value.name?.trim()
+);
+
+function formatTagDate(s) {
+  if (!s) return "";
+  const d = new Date(s);
+  if (isNaN(d)) return "";
+  return d.toLocaleDateString();
+}
 
 // ── Logs state ────────────────────────────────────────
 const logsOpen  = ref(null);
@@ -423,7 +997,9 @@ const filteredContainers = computed(() => {
 
   if (sortKey.value) {
     list = [...list].sort((a, b) => {
-      const v = a[sortKey.value] < b[sortKey.value] ? -1 : a[sortKey.value] > b[sortKey.value] ? 1 : 0;
+      const va = sortValue(a, sortKey.value);
+      const vb = sortValue(b, sortKey.value);
+      const v = va < vb ? -1 : va > vb ? 1 : 0;
       return sortAsc.value ? v : -v;
     });
   }
@@ -571,6 +1147,18 @@ function sortBy(key) {
   else { sortKey.value = key; sortAsc.value = true; }
 }
 
+function sortValue(c, key) {
+  if (key === "cpu") {
+    const s = statsByName.value[c.name];
+    return s ? (parseFloat(s.cpu_perc) || 0) : -1;
+  }
+  if (key === "memory") {
+    const s = statsByName.value[c.name];
+    return s ? (parseFloat(s.mem_perc) || 0) : -1;
+  }
+  return c[key] ?? "";
+}
+
 function sortIcon(key) {
   if (sortKey.value !== key) return "↕";
   return sortAsc.value ? "↑" : "↓";
@@ -590,18 +1178,52 @@ async function loadContainers() {
   } finally {
     loading.value = false;
   }
+  loadStats();
+}
+
+async function loadStats() {
+  try {
+    const data = await getAllContainerStats();
+    if (data.success) {
+      const map = {};
+      for (const s of data.data) map[s.name] = s;
+      statsByName.value = map;
+    }
+  } catch (e) {
+    console.warn("loadStats failed:", e?.response?.data || e.message);
+  }
+}
+
+async function loadServer() {
+  try {
+    const data = await getServerInfo();
+    if (data.success) {
+      serverInfo.value = data;
+      serverError.value = "";
+    } else {
+      serverError.value = data.error || "Unknown error";
+      log("Server info: " + serverError.value, "err");
+    }
+  } catch (e) {
+    const status = e?.response?.status;
+    const msg = e?.response?.data?.error || e?.message || "unknown";
+    serverError.value = `${msg}${status ? ` (HTTP ${status})` : ""}`;
+    log("Server info error: " + serverError.value, "err");
+    console.error("loadServer failed:", e?.response || e);
+  }
 }
 
 async function bulkAction(action) {
   if (!selected.value.length) return;
   const names = [...selected.value];
-  log(`docker ${action} → [${names.join(", ")}]`, "info");
+  const verb = action === "kill" ? "kill + remove" : action;
+  log(`docker ${verb} → [${names.join(", ")}]`, "info");
 
   const fn = { start: startContainers, stop: stopContainers, restart: restartContainers, kill: killContainers }[action];
   try {
     const data = await fn(names);
     if (data.success) {
-      log(`${action} OK on ${names.length} container(s)`, "ok");
+      log(`${verb} OK on ${names.length} container(s)`, "ok");
     } else {
       const failed = data.results.filter((r) => !r.success).map((r) => `${r.name}: ${r.error}`).join("; ");
       log("Errors: " + failed, "err");
@@ -614,21 +1236,185 @@ async function bulkAction(action) {
   }
 }
 
-async function handleRun() {
-  if (!runForm.value.image) return alert("Image is required");
-  log(`docker run ${runForm.value.name} (${runForm.value.image})...`, "info");
+// ── Run wizard ────────────────────────────────────────
+function openRunModal() {
+  runForm.value = DEFAULT_RUN_FORM();
+  runError.value = "";
+  newFolderName.value = "";
+  newVolume.value = "";
+  tagFilter.value = "";
+  browser.properties = { open: false, path: "", items: [], loading: false, error: "", filter: "" };
+  browser.logs       = { open: false, path: "", items: [], loading: false, error: "", filter: "" };
+  showRunModal.value = true;
+  loadTags();
+}
+
+function closeRunModal() {
+  showRunModal.value = false;
+}
+
+async function loadTags() {
+  dockerHub.loadingTags = true;
+  dockerHub.error = "";
   try {
-    const data = await runContainer(runForm.value);
+    const data = await getDockerHubTags(DOCKERHUB_USER, DOCKERHUB_REPO);
     if (data.success) {
-      log(`Container started — ID: ${data.container_id}`, "ok");
-      showRunModal.value = false;
-      runForm.value = { image: "", name: "", ports: "", env: "", cmd: "" };
-      await loadContainers();
+      dockerHub.tags = data.data;
+      log(`${data.count} tags loaded from ${DOCKERHUB_USER}/${DOCKERHUB_REPO}`, "ok");
     } else {
-      log("Error: " + data.error, "err");
+      dockerHub.error = data.error || "Could not load tags";
+      log("Tags error: " + dockerHub.error, "err");
     }
   } catch (e) {
-    log("Error: " + e.message, "err");
+    const status = e?.response?.status;
+    const apiMsg = e?.response?.data?.error;
+    dockerHub.error = apiMsg
+      ? `${apiMsg}${status ? ` (HTTP ${status})` : ""}`
+      : `${e.message}${status ? ` (HTTP ${status})` : ""}`;
+    console.error("loadTags failed:", e?.response || e);
+    log("Tags error: " + dockerHub.error, "err");
+  } finally {
+    dockerHub.loadingTags = false;
+  }
+}
+
+// ── File browsers ─────────────────────────────────────
+function pathSegments(p) {
+  return p ? p.split("/").filter(Boolean) : [];
+}
+
+function joinSegments(segs, lastIndex) {
+  return segs.slice(0, lastIndex + 1).join("/");
+}
+
+async function toggleBrowser(kind) {
+  const b = browser[kind];
+  b.open = !b.open;
+  if (b.open && !b.items.length) {
+    if (kind === "properties") await loadProperties("");
+    else await loadLogs("");
+  }
+}
+
+async function loadProperties(path) {
+  const b = browser.properties;
+  b.loading = true;
+  b.error = "";
+  try {
+    const data = await listProperties(path);
+    if (data.success) {
+      b.path = data.path || "";
+      b.items = data.items;
+    } else {
+      b.error = data.error || "Could not load directory";
+    }
+  } catch (e) {
+    b.error = e?.response?.data?.error || e.message;
+  } finally {
+    b.loading = false;
+  }
+}
+
+async function loadLogs(path) {
+  const b = browser.logs;
+  b.loading = true;
+  b.error = "";
+  try {
+    const data = await listLogs(path);
+    if (data.success) {
+      b.path = data.path || "";
+      b.items = data.items.filter((i) => i.type === "directory");
+    } else {
+      b.error = data.error || "Could not load directory";
+    }
+  } catch (e) {
+    b.error = e?.response?.data?.error || e.message;
+  } finally {
+    b.loading = false;
+  }
+}
+
+function onPropertiesItemClick(item) {
+  if (item.type === "directory") {
+    loadProperties(item.path);
+  } else {
+    runForm.value.env_file = item.path;
+    browser.properties.open = false;
+  }
+}
+
+function onLogsItemClick(item) {
+  loadLogs(item.path);
+}
+
+function pickCurrentLogsFolder() {
+  if (!browser.logs.path) return;
+  runForm.value.logs_folder = browser.logs.path;
+  browser.logs.open = false;
+}
+
+async function createLogsFolder() {
+  const name = newFolderName.value.trim();
+  if (!name) return;
+  const target = browser.logs.path ? `${browser.logs.path}/${name}` : name;
+  const b = browser.logs;
+  b.error = "";
+  try {
+    const data = await createLogFolder(target);
+    if (data.success) {
+      newFolderName.value = "";
+      log(`Created /opt/logs/${data.path}`, "ok");
+      runForm.value.logs_folder = data.path;
+      await loadLogs(b.path);
+      b.open = false;
+    } else {
+      b.error = data.error || "Could not create folder";
+    }
+  } catch (e) {
+    b.error = e?.response?.data?.error || e.message;
+  }
+}
+
+async function handleRun() {
+  if (!canSubmitRun.value) {
+    runError.value = "Username, repository and container name are required";
+    return;
+  }
+  runError.value = "";
+  runSubmitting.value = true;
+
+  const f = runForm.value;
+  const payload = {
+    image: `${DOCKERHUB_USER}/${DOCKERHUB_REPO}`,
+    tag: f.tag.trim(),
+    name: f.name.trim(),
+    pull: true,
+    container_log_path: (f.container_log_path || "/app/logs/").trim(),
+  };
+  if (f.port?.toString().trim()) payload.port = f.port.toString().trim();
+  if (f.cpus !== "" && f.cpus !== null && !Number.isNaN(Number(f.cpus))) payload.cpus = Number(f.cpus);
+  if (f.memory?.trim()) payload.memory = f.memory.trim();
+  if (f.env_file?.trim()) payload.env_file = f.env_file.trim();
+  if (f.logs_folder?.trim()) payload.logs_folder = f.logs_folder.trim();
+  if (f.volumes?.length) payload.volumes = [...f.volumes];
+
+  log(`docker run ${payload.name} (${payload.image}:${payload.tag})...`, "info");
+  try {
+    const data = await runContainer(payload);
+    if (data.success) {
+      log(`Container started — ID: ${(data.container_id || "").slice(0, 12)}`, "ok");
+      closeRunModal();
+      await loadContainers();
+    } else {
+      const detail = data.step ? `[${data.step}] ${data.error}` : data.error;
+      runError.value = detail || "Run failed";
+      log("Error running container: " + runError.value, "err");
+    }
+  } catch (e) {
+    runError.value = e?.response?.data?.error || e.message;
+    log("Error: " + runError.value, "err");
+  } finally {
+    runSubmitting.value = false;
   }
 }
 
@@ -690,15 +1476,20 @@ function scrollBottom() {
 // ── Lifecycle ──────────────────────────────────────────
 let tickTimer = null;
 
+let serverTimer = null;
+
 onMounted(() => {
   loadContainers();
-  refreshTimer = setInterval(loadContainers, 60000);
+  loadServer();
+  refreshTimer = setInterval(() => { loadContainers(); loadServer(); }, 60000);
+  serverTimer  = setInterval(loadStats, 5000);
   tickTimer = setInterval(() => { now.value = Date.now(); }, 60000);
 });
 
 onUnmounted(() => {
   stopPoll();
   if (refreshTimer) clearInterval(refreshTimer);
+  if (serverTimer) clearInterval(serverTimer);
   if (tickTimer) clearInterval(tickTimer);
 });
 </script>
@@ -725,12 +1516,144 @@ onUnmounted(() => {
 .btn-header-restart { @apply border-blue-400/30 text-blue-300 hover:bg-blue-500/20; }
 .btn-header-stop    { @apply border-amber-400/30 text-amber-300 hover:bg-amber-500/20; }
 .btn-header-kill    { @apply border-red-400/30 text-red-300 hover:bg-red-500/20; }
+.btn-header-new     { @apply border-emerald-400/30 text-emerald-200 hover:bg-emerald-500/25 font-semibold; }
+
+/* Top loading bar */
+.top-loader {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  z-index: 9999;
+  overflow: hidden;
+  background: rgba(59, 130, 246, 0.12);
+  pointer-events: none;
+}
+.top-loader-bar {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 35%;
+  background: linear-gradient(90deg, transparent, #3b82f6 50%, transparent);
+  animation: top-loader-slide 1.3s infinite ease-in-out;
+}
+@keyframes top-loader-slide {
+  0%   { left: -35%; }
+  100% { left: 100%; }
+}
+.top-loader-fade-enter-active,
+.top-loader-fade-leave-active {
+  transition: opacity 200ms ease;
+}
+.top-loader-fade-enter-from,
+.top-loader-fade-leave-to {
+  opacity: 0;
+}
+
+/* Server status cards */
+.server-card {
+  @apply bg-white border border-gray-200 rounded-xl px-3 py-2 shadow-sm;
+}
+.server-card-head {
+  @apply flex items-center justify-between gap-2;
+}
+.server-card-title {
+  @apply text-[11px] font-semibold text-gray-600 uppercase tracking-wider;
+}
+.server-card-pct {
+  @apply text-xs font-bold text-slate-700;
+}
+.server-card-foot {
+  @apply text-[11px] text-gray-500 mt-1 font-mono;
+}
+.server-bar {
+  @apply h-1.5 bg-gray-100 rounded-full overflow-hidden mt-2;
+}
+.server-bar-fill {
+  @apply h-full transition-all duration-300;
+}
+
+/* Run wizard modal */
+.section-title {
+  @apply text-[11px] font-semibold uppercase tracking-wider text-slate-500 mb-2;
+}
+.run-label {
+  @apply block text-[11px] font-medium text-gray-500 mb-1;
+}
+.run-input {
+  @apply w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white shadow-sm
+         focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 transition-all
+         disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed;
+}
+.search-input {
+  padding-left: 2.25rem;
+}
+.run-select {
+  @apply appearance-none w-full pl-3 py-2 border border-gray-200 rounded-lg text-sm bg-white shadow-sm
+         cursor-pointer font-medium text-gray-700
+         hover:border-gray-300
+         focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 transition-all
+         disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed;
+  padding-right: 2.25rem;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  background-size: 1rem 1rem;
+}
+.run-select:focus {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%233b82f6' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+}
+.btn-run-secondary {
+  @apply px-3 py-2 rounded-lg border border-gray-300 bg-white text-gray-700 text-xs font-medium
+         hover:bg-gray-50 transition-colors whitespace-nowrap
+         disabled:opacity-40 disabled:cursor-not-allowed disabled:pointer-events-none;
+}
+
+/* Tag datatable */
+.tag-th {
+  @apply text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wider
+         px-3 py-2 border-b border-gray-200 cursor-pointer select-none
+         whitespace-nowrap transition-colors hover:text-gray-700;
+}
+.tag-th-date { @apply w-40; }
+.tag-td {
+  @apply px-3 py-2 border-b border-gray-100/80 align-middle whitespace-nowrap;
+}
+.tag-row-tr {
+  @apply cursor-pointer transition-colors hover:bg-blue-50;
+}
+.tag-row-tr.tag-row-active {
+  @apply bg-blue-100 hover:bg-blue-100 font-semibold text-blue-800;
+}
+
+/* Inline file/folder picker */
+.picker {
+  @apply mt-2 border border-gray-200 rounded-lg bg-gray-50 p-2 text-xs;
+}
+.picker-bar {
+  @apply flex items-center gap-1 mb-2 text-gray-600 flex-wrap;
+}
+.picker-crumb {
+  @apply px-1.5 py-0.5 rounded hover:bg-blue-100 hover:text-blue-700 text-gray-700 transition-colors;
+}
+.picker-list {
+  @apply max-h-44 overflow-y-auto bg-white border border-gray-200 rounded;
+}
+.picker-item {
+  @apply w-full px-2 py-1.5 text-left hover:bg-blue-50 flex items-center gap-2
+         border-b border-gray-100 last:border-b-0 transition-colors;
+}
 
 /* General buttons */
 .btn {
   @apply px-3 py-1.5 rounded-lg border border-gray-300 bg-white text-gray-700 cursor-pointer text-[13px] transition-colors duration-150 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed disabled:pointer-events-none;
 }
-.btn-run     { @apply bg-slate-800 text-white border-slate-800 hover:bg-slate-700; }
+.btn-run {
+  @apply px-4 py-1.5 rounded-lg border border-slate-800 bg-slate-800 text-white text-xs font-semibold
+         cursor-pointer transition-colors duration-150 hover:bg-slate-700 hover:border-slate-700
+         disabled:opacity-40 disabled:cursor-not-allowed disabled:pointer-events-none;
+}
 .btn-sm-tw   { @apply px-2.5 py-1 rounded-lg border border-gray-300 bg-white text-gray-600 cursor-pointer text-xs font-medium hover:bg-gray-100 transition-colors; }
 
 /* Pagination */
